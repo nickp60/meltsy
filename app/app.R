@@ -90,16 +90,17 @@ make_model<- function(x, y, random=c(), fixed=c(), interacting=list(), nested=li
   }
   return(mx)
 }
-run_model <- function(df, model_string){
+run_model <- function( model_string, df){
   print(df)
   print(model_string)
+  # return(lm(model_string, data=df))
   return(lmer(model_string, data=df, REML=FALSE))
 }
 # Define UI for application that draws a histogram
 ui <- fluidPage(
   
   # Application title
-  titlePanel("Mixed Effects Linear model Timecourses with Shiny"),
+  titlePanel("Mixed Effects Linear model Time Series"),
   # Input: Select a file ----
   # Sidebar with a slider input for number of bins 
   sidebarLayout(
@@ -133,7 +134,7 @@ ui <- fluidPage(
         tabPanel(
           "model",
           verbatimTextOutput("model"),
-          actionButton("execute_model", "Execute Model"),
+          actionButton("A_execute_model", "Execute Model"),
           verbatimTextOutput("model_output"),
           dataTableOutput("modelsdf"),
           actionButton("save_model", "Save Model")
@@ -145,7 +146,7 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-  values <- reactiveValues(RESULTS = data.frame(), RESULTS_COUNTER=0, MODEL=NA, MODEL_STRING=NA)
+  values <- reactiveValues(RESULTS = data.frame(), RESULTS_COUNTER=0, MODEL=NA, MODEL_STRING="methane ~ day + treatment + (1|day)")
   output$exploreplot <- renderPlot({
     req(input$xcol)
     # print(input$fixedcols)
@@ -220,16 +221,34 @@ server <- function(input, output) {
                fixed=input$fixedcols, interacting=input$interactingcols,
                nested=list())
   )
-  #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
-  observeEvent(input$execute_model, {
+
+  observeEvent(input$A_execute_model, {
     values$MODEL_STRING <- make_model(x=input$xcol,  y=input$ycol, random=input$randomcols,
                fixed=input$fixedcols, interacting=input$interactingcols,
                nested=list())
-    # MODEL <<- run_model(df = X, model_string = MODEL_STRING)
-    values$MODEL <- run_model(df = X, model_string = values$MODEL_STRING)
-    output$model_output <- renderPrint(MODEL)
-    #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
+    print("hi hop")
+    thismod <- values$MODEL_STRING
+    values$MODEL <- lmer(values$MODEL_STRING, 
+                         data = data.frame(X))
+    
+    output$model_output <- renderPrint({
+      return(values$MODEL)
+    })
   })
+  
+  # observeEvent(input$execute_model, {
+  #   print("hi hop")
+  #   print(values$MODEL_STRING)
+  #   MODEL_STRING <<- values$MODEL_STRING
+  #   print(MODEL_STRING)
+  #   print(values$MODEL)
+  #   values$MODEL <- lmer(MODEL_STRING, data = X)
+  #   
+  #   output$model_output <- renderPrint({
+  #     return(values$MODEL)
+  #   })
+  #   #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
+  # })
   observeEvent(input$save_model, {
     values$RESULTS_COUNTER <- values$RESULTS_COUNTER + 1
     row <- data.frame(
@@ -237,9 +256,9 @@ server <- function(input, output) {
       xcol = input$xcol,
       ycol =  input$ycol,
       fixedcols =  paste(input$fixedcols, collapse = ","),
-      randomcols =   paste(input$randomcols, collapse = ","),
-      interactingcols =   paste(input$interactingcols, collapse = ","),
-      nestedcols =   paste(input$nestedcols, collapse = ","),
+      randomcols = paste(input$randomcols, collapse = ","),
+      interactingcols = paste(input$interactingcols, collapse = ","),
+      nestedcols = paste(input$nestedcols, collapse = ","),
       model_string = values$MODEL_STRING,
       model = "run_model(df = X, model_string = MODEL_STRING)",
       stringsAsFactors = F)
@@ -253,6 +272,9 @@ server <- function(input, output) {
   output$modelsdf <- renderDataTable({
     values$RESULTS
   })
+  # output$model_output <- renderDataTable({
+  #   values$MODEL
+  # })
 }
 
 # Run the application 
