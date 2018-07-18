@@ -8,7 +8,7 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+# knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library( tidyr)
 ```
@@ -59,7 +59,7 @@ ggplot(data, aes(x=day, y=methane, color=treatment)) + geom_smooth(method = "lm"
 # nonm <- lm(methane ~ day + treatment + rep, data = data)
 #display(nonm)
 
-m1 <- lmer("methane ~ day + treatment + (1| rep)", data=data, REML=FALSE)
+m1 <- lmer("methane ~ day + treatment + (1| rep)", data=data, )
 
 m1 <- lmer(methane ~ day + treatment + (1| rep), data=data, REML=FALSE)
 m2 <- lmer(methane ~ day  + (1| rep), data=data, REML=FALSE)

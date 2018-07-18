@@ -9,10 +9,14 @@
 
 library(shiny)
 library(ggplot2)
+library(lme4)
 # look a global variable cause I'm a lazy duck
+#RESULTS_COUNTER = 0
+#RESULTS<-data.frame()
 X <- NA
 ORIGINALX <- X
-
+MODEL = NA
+MODEL_STRING = NA
 COLS <- NA
 sPAIRS <- NA
 PAIRS <- NA
@@ -41,9 +45,10 @@ updateX <- function(input=input){
 }
 updateX()
 
-run_model<- function(data, x, y, random=c(), fixed=c(), interacting=list(), nested=list()){
+make_model<- function(x, y, random=c(), fixed=c(), interacting=list(), nested=list()){
   # make a model given a few parameters
   # interacting parameters should be a list of vector pairs, like list(c("A", "B"), c("B", "C"))[
+  # print(str(df))
   randoms = ""
   fixeds = ""
   interactings = ""
@@ -83,11 +88,16 @@ run_model<- function(data, x, y, random=c(), fixed=c(), interacting=list(), nest
     nesteds <- paste(nested_strings, collapse = " + ")
     mx <- paste(mx, nested_strings, sep = " + " )
   }
-  return(lmer(mx, data=data))
+  return(mx)
+}
+run_model <- function(df, model_string){
+  print(df)
+  print(model_string)
+  return(lmer(model_string, data=df, REML=FALSE))
 }
 # Define UI for application that draws a histogram
 ui <- fluidPage(
-   
+  
   # Application title
   titlePanel("Mixed Effects Linear model Timecourses with Shiny"),
   # Input: Select a file ----
@@ -101,18 +111,18 @@ ui <- fluidPage(
                    "text/comma-separated-values,text/plain",
                    ".csv")
       ),
-      tags$hr(),
+      # tags$hr(),
       selectInput("xcol", "X column/Independent Variable", choices=COLS, selected=COLS[1]),
       selectInput("ycol", "y column/Dependent Variable", choices=COLS, selected = COLS[5]),
-      selectInput("groupcol", "group column", choices=COLS, selected = COLS[2]),
+      # selectInput("groupcol", "group column", choices=COLS, selected = COLS[2]),
       checkboxGroupInput("fixedcols", "Fixed Effects", choices = COLS),
       checkboxGroupInput("randomcols", "Random Effects", choices = COLS), #, multiple = T),
-      selectInput("interactingcols", "Interacting Effects", choices = sPAIRS, multiple=T),
+      selectInput("interactingcols", "Interacting Effects", choices = sPAIRS, multiple=T)
       #      checkboxGroupInput("Nestedcols", "Interating Effects", choices = COLS)
-      actionButton("add", "Update Model")
+      # actionButton("add", "Update Model")
     ),
     
-      # Show a plot of the generated distribution
+    # Show a plot of the generated distribution
     mainPanel(
       tabsetPanel(
         tabPanel(
@@ -122,7 +132,11 @@ ui <- fluidPage(
         ),
         tabPanel(
           "model",
-          verbatimTextOutput("model")
+          verbatimTextOutput("model"),
+          actionButton("execute_model", "Execute Model"),
+          verbatimTextOutput("model_output"),
+          dataTableOutput("modelsdf"),
+          actionButton("save_model", "Save Model")
         )
       )
     )
@@ -131,20 +145,21 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-   output$exploreplot <- renderPlot({
-     req(input$xcol)
-     print(input$fixedcols)
-     print(length(input$fixedcols))
-     print(input$fixedcols[1])
-     try(
+  values <- reactiveValues(RESULTS = data.frame(), RESULTS_COUNTER=0, MODEL=NA, MODEL_STRING=NA)
+  output$exploreplot <- renderPlot({
+    req(input$xcol)
+    # print(input$fixedcols)
+    # print(length(input$fixedcols))
+    # print(input$fixedcols[1])
+    try(
       if(is.null(input$fixedcols)){
         ggplot(X, aes_string(y=input$ycol, x=input$xcol))+
           geom_smooth(alpha=.2)+ 
           geom_jitter(width = .1)
       } else if(length(input$fixedcols) == 1){
-      ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], shape=input$fixedcols[1]))+
-       geom_smooth(alpha=.2)+ 
-       geom_jitter(width = .1)
+        ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], shape=input$fixedcols[1]))+
+          geom_smooth(alpha=.2)+ 
+          geom_jitter(width = .1)
       } else if(length(input$fixedcols) == 2){
         ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], linetype=input$fixedcols[2], shape=input$fixedcols[1]))+
           geom_smooth(alpha=.2)+ 
@@ -155,84 +170,89 @@ server <- function(input, output) {
           geom_jitter(width = .1)
       }
       
-   )
-     
-   })
-   output$contents <- renderDataTable({
-     # input$file1 will be NULL initially. After the user selects
-     # and uploads a file, head of that data file by default,
-     # or all rows if selected, will be shown.
-     
-     #req(input$file1)
-     if (is.null(input$file)){
-       updateX(input)
-       return(X)
-     }
-     # when reading semicolon separated files,
-     # having a comma separator causes `read.csv` to error
-     tryCatch(
-       {
-         df <- read.csv(input$file1$datapath,
-                        header = T,
-                        sep = ",",
-                        quote = "\"")
-       },
-       error = function(e) {
-         # return a safeError if a parsing error occurs
-         stop(safeError(e))
-       }
-     )
-     X <- df
-     updateX(input)
-     return(X)
-
-   },   options = list(
-     pageLength = 5)
-   )
-   # observeEvent(input$add, {
-     # for (col in COLS)
-     # insertUI(
-     #   selector = "#add",
-     #   where = "afterEnd",
-     #   ui = checkboxGroupInput("factorcols", "Columns that should be treated as factors (ie, non-numeric)", choices = COLS)
-     # )
-     #shinyjs::disable("add")
-   #   insertUI(
-   #     selector = "#add",
-   #     where = "afterEnd",
-   #     ui = checkboxGroupInput("fixedcols", "Fixed Effects", choices = COLS, selected = input$ycol)
-   #   )
-   #   insertUI(
-   #     selector = "#add",
-   #     where = "afterEnd",
-   #     ui =tags$hr()
-   #   )
-   #   insertUI(
-   #     selector = "#add",
-   #     where = "afterEnd",
-   #     ui = selectInput("groupcol", "group column", choices=colnames(X), selected =colnames(X)[3])
-   #   )
-   #   insertUI(
-   #     selector = "#add",
-   #     where = "afterEnd",
-   #     ui = selectInput("ycol", "y column/Dependent Variable", choices=colnames(X), selected = colnames(X)[2])
-   #   )
-   #   insertUI(
-   #     selector = "#add",
-   #     where = "afterEnd",
-   #     ui = selectInput("xcol", "X column/Independent Variable", choices=colnames(X), selected=colnames(X)[1])
-   #   )
-   # })
-   ###################################################################
-   observeEvent(input$add, {
-     output$model <- renderPrint(
-       run_model(data=data, x=input$xcol,  y=input$ycol, random=input$randomcols, 
-                            fixed=input$fixedcols, interacting=input$interactingcols, nested=list())
-     )
-     
-   #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
-   })
-   
+    )
+    
+  })
+  output$contents <- renderDataTable({
+    # input$file1 will be NULL initially. After the user selects
+    # and uploads a file, head of that data file by default,
+    # or all rows if selected, will be shown.
+    
+    #req(input$file1)
+    if (is.null(input$file)){
+      updateX(input)
+      return(X)
+    }
+    # when reading semicolon separated files,
+    # having a comma separator causes `read.csv` to error
+    tryCatch(
+      {
+        df <- read.csv(input$file1$datapath,
+                       header = T,
+                       sep = ",",
+                       quote = "\"")
+      },
+      error = function(e) {
+        # return a safeError if a parsing error occurs
+        stop(safeError(e))
+      }
+    )
+    X <- df
+    updateX(input)
+    return(X)
+    
+  },   options = list(
+    pageLength = 5)
+  )
+  
+  ###################################################################
+  # observeEvent(input$add, {
+  #   values$MODEL_STRING <- make_model(x=input$xcol,  y=input$ycol, random=input$randomcols,
+  #                                     fixed=input$fixedcols, interacting=input$interactingcols,
+  #                                     nested=list())
+  #   output$model <- renderText(
+  #     values$MODEL_STRING
+  #   )
+  #   #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
+  # })
+ output$model <- renderText(
+    make_model(x=input$xcol,  y=input$ycol, random=input$randomcols,
+               fixed=input$fixedcols, interacting=input$interactingcols,
+               nested=list())
+  )
+  #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
+  observeEvent(input$execute_model, {
+    values$MODEL_STRING <- make_model(x=input$xcol,  y=input$ycol, random=input$randomcols,
+               fixed=input$fixedcols, interacting=input$interactingcols,
+               nested=list())
+    # MODEL <<- run_model(df = X, model_string = MODEL_STRING)
+    values$MODEL <- run_model(df = X, model_string = values$MODEL_STRING)
+    output$model_output <- renderPrint(MODEL)
+    #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
+  })
+  observeEvent(input$save_model, {
+    values$RESULTS_COUNTER <- values$RESULTS_COUNTER + 1
+    row <- data.frame(
+      id = values$RESULTS_COUNTER,
+      xcol = input$xcol,
+      ycol =  input$ycol,
+      fixedcols =  paste(input$fixedcols, collapse = ","),
+      randomcols =   paste(input$randomcols, collapse = ","),
+      interactingcols =   paste(input$interactingcols, collapse = ","),
+      nestedcols =   paste(input$nestedcols, collapse = ","),
+      model_string = values$MODEL_STRING,
+      model = "run_model(df = X, model_string = MODEL_STRING)",
+      stringsAsFactors = F)
+    values$RESULTS <- rbind(values$RESULTS, row)
+    # output$model <- renderPrint(
+    #   run_model(data=X, x=input$xcol,  y=input$ycol, random=input$randomcols, 
+    #             fixed=input$fixedcols, interacting=input$interactingcols, nested=list())
+    # )
+    print("postupdated")
+  })
+  output$modelsdf <- renderDataTable({
+    values$RESULTS
+  })
 }
 
 # Run the application 
