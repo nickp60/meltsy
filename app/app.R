@@ -41,7 +41,7 @@ updateX <- function(input=input){
 }
 updateX()
 
-make_model<- function(x, y, random=c(), fixed=c(), interacting=list(), nested=list()){
+run_model<- function(data, x, y, random=c(), fixed=c(), interacting=list(), nested=list()){
   # make a model given a few parameters
   # interacting parameters should be a list of vector pairs, like list(c("A", "B"), c("B", "C"))[
   randoms = ""
@@ -63,9 +63,10 @@ make_model<- function(x, y, random=c(), fixed=c(), interacting=list(), nested=li
   if (length(interacting) != 0){
     interaction_strings = c()
     for (i in 1:length(interacting)){
+      splitint <- strsplit(interacting[i], " ")[[1]]
       interaction_strings <- c(
         interaction_strings, 
-        paste("(", interacting[[i]][1], "*",  interacting[[i]][2], ")" )
+        paste("(", splitint[1], "*",  splitint[2], ")" )
       )
     }
     interactings <- paste(interaction_strings, collapse = " + ")
@@ -82,13 +83,13 @@ make_model<- function(x, y, random=c(), fixed=c(), interacting=list(), nested=li
     nesteds <- paste(nested_strings, collapse = " + ")
     mx <- paste(mx, nested_strings, sep = " + " )
   }
-  return(mx)
+  return(lmer(mx, data=data))
 }
 # Define UI for application that draws a histogram
 ui <- fluidPage(
    
   # Application title
-  titlePanel("Analysis of Process Data"),
+  titlePanel("Mixed Effects Linear model Timecourses with Shiny"),
   # Input: Select a file ----
   # Sidebar with a slider input for number of bins 
   sidebarLayout(
@@ -105,7 +106,7 @@ ui <- fluidPage(
       selectInput("ycol", "y column/Dependent Variable", choices=COLS, selected = COLS[5]),
       selectInput("groupcol", "group column", choices=COLS, selected = COLS[2]),
       checkboxGroupInput("fixedcols", "Fixed Effects", choices = COLS),
-      selectInput("randomcols", "Random Effects", choices = sPAIRS, multiple = T),
+      checkboxGroupInput("randomcols", "Random Effects", choices = COLS), #, multiple = T),
       selectInput("interactingcols", "Interacting Effects", choices = sPAIRS, multiple=T),
       #      checkboxGroupInput("Nestedcols", "Interating Effects", choices = COLS)
       actionButton("add", "Update Model")
@@ -121,7 +122,7 @@ ui <- fluidPage(
         ),
         tabPanel(
           "model",
-          textOutput("model")
+          verbatimTextOutput("model")
         )
       )
     )
@@ -132,11 +133,30 @@ ui <- fluidPage(
 server <- function(input, output) {
    output$exploreplot <- renderPlot({
      req(input$xcol)
+     print(input$fixedcols)
+     print(length(input$fixedcols))
+     print(input$fixedcols[1])
      try(
-      ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$groupcol, fill=input$groupcol, linetype=input$groupcol, shape=input$groupcol))+
+      if(is.null(input$fixedcols)){
+        ggplot(X, aes_string(y=input$ycol, x=input$xcol))+
+          geom_smooth(alpha=.2)+ 
+          geom_jitter(width = .1)
+      } else if(length(input$fixedcols) == 1){
+      ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], shape=input$fixedcols[1]))+
        geom_smooth(alpha=.2)+ 
        geom_jitter(width = .1)
+      } else if(length(input$fixedcols) == 2){
+        ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], linetype=input$fixedcols[2], shape=input$fixedcols[1]))+
+          geom_smooth(alpha=.2)+ 
+          geom_jitter(width = .1)
+      } else if(length(input$fixedcols) == 3){
+        ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], fill=input$fixedcols[2], linetype=input$fixedcols[3], shape=input$fixedcols[1]))+
+          geom_smooth(alpha=.2)+ 
+          geom_jitter(width = .1)
+      }
+      
    )
+     
    })
    output$contents <- renderDataTable({
      # input$file1 will be NULL initially. After the user selects
@@ -205,11 +225,11 @@ server <- function(input, output) {
    # })
    ###################################################################
    observeEvent(input$add, {
-   
-   output$model <- renderText(
-     make_model(x=input$xcol,  y=input$ycol, random=c(), fixed=input$fixedcols,
-                interacting=list(), nested=list())
-   )
+     output$model <- renderPrint(
+       run_model(data=data, x=input$xcol,  y=input$ycol, random=input$randomcols, 
+                            fixed=input$fixedcols, interacting=input$interactingcols, nested=list())
+     )
+     
    #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
    })
    

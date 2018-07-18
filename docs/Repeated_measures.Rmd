@@ -20,8 +20,8 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 ```{r cars}
-data <- read.csv("./data/testdata.csv")
-data$rep <- as.factor(data$rep)
+data <- read.csv("../data/testdata.csv")
+data$rep <- letters[(as.factor(data$rep))]
 head(data)
 # add in random pH values that dont fluctuate much
 set.seed(1234)
@@ -29,7 +29,7 @@ data$pH <- rnorm(nrow(data), mean=7, sd=.5)
 # and some random value for gas production: some amount added to the methan volume
 data$gas <- data$methane + rnorm(nrow(data), mean=200, sd=100)
 
-#write.table(data, file="~/Desktop/X/testdata.csv", row.names = F, sep = ",")
+#write.table(data, file="./data/testdata.csv", row.names = F, sep = ",")
 ggplot(data, aes(x=day, y=methane,  group=day)) + geom_violin() + geom_jitter() 
 
 # reshape to tall data
