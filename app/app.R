@@ -84,11 +84,16 @@ ui <- fluidPage(
                    ".csv")
       ),
       # tags$hr(),
-      selectInput("xcol", "X column/Independent Variable", choices=COLS, selected=COLS[1]),
-      selectInput("ycol", "Y column/Dependent Variable", choices=COLS, selected = COLS[5]),
-      checkboxGroupInput("fixedcols", "Fixed Effects", choices = COLS),
-      checkboxGroupInput("randomcols", "Random Effects", choices = COLS), #, multiple = T),
-      selectInput("interactingcols", "Interacting Effects", choices = sPAIRS, multiple=T)
+      uiOutput("dy_xcol"),
+      uiOutput("dy_ycol"),
+      uiOutput("dy_fixedcols"),
+      uiOutput("dy_randomcols"),
+      uiOutput("dy_interactingcols")
+      # selectInput("xcol", "X column/Independent Variable", choices=COLS, selected=COLS[1]),
+      # selectInput("ycol", "Y column/Dependent Variable", choices=COLS, selected = COLS[5]),
+      # checkboxGroupInput("fixedcols", "Fixed Effects", choices = COLS),
+      # checkboxGroupInput("randomcols", "Random Effects", choices = COLS), #, multiple = T),
+      # selectInput("interactingcols", "Interacting Effects", choices = sPAIRS, multiple=T)
       #      checkboxGroupInput("Nestedcols", "Interating Effects", choices = COLS)
     ),
     
@@ -157,7 +162,7 @@ server <- function(input, output) {
     )
     
   })
-  dataframe <- reactive({
+  rdataframe <- reactive({
     # input$file1 will be NULL initially. After the user selects
     # and uploads a file, head of that data file by default,
     # or all rows if selected, will be shown.
@@ -179,11 +184,39 @@ server <- function(input, output) {
       
     }
   })
+  rcols <- reactive({colnames(rdataframe())})
+  rspairs <- reactive({
+    spairs <- paste(expand.grid(rcols(), rcols())$Var1, expand.grid(rcols(), rcols())$Var2)
+    #print(spairs)
+    spairs
+  })
+  rpairs <- reactive({
+    pairs <- strsplit(rspairs(), " ")
+    #print(pairs)
+    pairs
+  })
   
+  output$dy_xcol <- renderUI({
+    selectInput(
+    "xcol", "X column/Independent Variable", choices=rcols(), selected=rcols()[1])
+  })
+  output$dy_ycol <- renderUI({
+    selectInput(
+    "ycol", "Y column/Dependent Variable", choices=rcols(), selected = rcols()[2])
+  })
+  output$dy_fixedcols <- renderUI({
+    checkboxGroupInput("fixedcols", "Fixed Effects", choices = rcols())
+  })
+  output$dy_randomcols <- renderUI({
+    checkboxGroupInput("randomcols", "Random Effects", choices = rcols())
+  })
+  output$dy_interactingcols <- renderUI({
+    selectInput("interactingcols", "Interacting Effects", choices = rspairs(), multiple=T)
+  })
   
   
   output$contents <- renderDataTable({
-    dataframe()
+    rdataframe()
   }, options = list(
     pageLength = 5)
   )
@@ -247,17 +280,24 @@ server <- function(input, output) {
     values$MODEL_STRING <- make_model(x=input$xcol,  y=input$ycol, random=input$randomcols,
                                       fixed=input$fixedcols, interacting=input$interactingcols,
                                       nested=list())
-    thismod <- values$MODEL_STRING
-    if (is.null(input$randomcols) && is.null(input$interactingcols) && is.null(input$randomcols)){
-      values$MODEL <- lm(values$MODEL_STRING, 
-                         data = data.frame(X))
-    } else{
-      values$MODEL <- lmer(values$MODEL_STRING, 
-                           data = data.frame(X), REML=FALSE)
-    }
-    output$model_output <- renderPrint({
-      return(values$MODEL)
-    })
+    print(values$MODEL_STRING)
+    tryCatch(
+      {
+        if (is.null(input$randomcols) ){
+          values$MODEL <- lm(values$MODEL_STRING, 
+                             data = data.frame(X))
+        } else{
+          values$MODEL <- lmer(values$MODEL_STRING, 
+                               data = data.frame(X), REML=FALSE)
+        }
+        output$model_output <- renderPrint({
+          return(values$MODEL)
+        })
+      }, error = function(e) {
+        # return a safeError if a parsing error occurs
+        output$model_output <- renderPrint(safeError(e))
+      }
+    )
   })
   
   observeEvent(input$save_model, {
