@@ -10,6 +10,8 @@
 library(shiny)
 library(ggplot2)
 library(lme4)
+#install.packages("papeR")
+# library(stargazer)
 # look a global variable cause I'm a lazy duck
 #RESULTS_COUNTER = 0
 #RESULTS<-data.frame()
@@ -132,12 +134,21 @@ ui <- fluidPage(
           plotOutput("exploreplot")
         ),
         tabPanel(
-          "model",
+          "Model",
           verbatimTextOutput("model"),
           actionButton("A_execute_model", "Execute Model"),
           verbatimTextOutput("model_output"),
-          dataTableOutput("modelsdf"),
-          actionButton("save_model", "Save Model")
+          actionButton("save_model", "Save Model"),
+          dataTableOutput("modelsdf")
+        ),
+        tabPanel(
+          "Compare",
+          dataTableOutput("modelsdf2"),
+          selectInput("model1", "A: ID Model ID from first column of list above ", choices = c(1:100), multiple=F, selected = 1),
+          selectInput("model2", "B: ID Model ID from first column of list above ", choices = c(1:100), multiple=F, selected = 2),
+          actionButton("run_anova", "Compare models"),
+          verbatimTextOutput("model_compare_output")
+#          htmlOutput("model_compare_output")
         )
       )
     )
@@ -146,7 +157,7 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-  values <- reactiveValues(RESULTS = data.frame(), RESULTS_COUNTER=0, MODEL=NA, MODEL_STRING="methane ~ day + treatment + (1|day)")
+  values <- reactiveValues(RESULTS = data.frame(), RESULTS_COUNTER=0, MODEL=NA, MODEL_STRING=NA, MODEL_LIST=list())
   output$exploreplot <- renderPlot({
     req(input$xcol)
     # print(input$fixedcols)
@@ -224,31 +235,21 @@ server <- function(input, output) {
 
   observeEvent(input$A_execute_model, {
     values$MODEL_STRING <- make_model(x=input$xcol,  y=input$ycol, random=input$randomcols,
-               fixed=input$fixedcols, interacting=input$interactingcols,
-               nested=list())
-    print("hi hop")
+                                      fixed=input$fixedcols, interacting=input$interactingcols,
+                                      nested=list())
     thismod <- values$MODEL_STRING
-    values$MODEL <- lmer(values$MODEL_STRING, 
+    if (is.null(input$randomcols) && is.null(input$interactingcols) && is.null(input$randomcols)){
+      values$MODEL <- lm(values$MODEL_STRING, 
                          data = data.frame(X))
-    
+    } else{
+      values$MODEL <- lmer(values$MODEL_STRING, 
+                           data = data.frame(X), REML=FALSE)
+    }
     output$model_output <- renderPrint({
       return(values$MODEL)
     })
   })
   
-  # observeEvent(input$execute_model, {
-  #   print("hi hop")
-  #   print(values$MODEL_STRING)
-  #   MODEL_STRING <<- values$MODEL_STRING
-  #   print(MODEL_STRING)
-  #   print(values$MODEL)
-  #   values$MODEL <- lmer(MODEL_STRING, data = X)
-  #   
-  #   output$model_output <- renderPrint({
-  #     return(values$MODEL)
-  #   })
-  #   #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
-  # })
   observeEvent(input$save_model, {
     values$RESULTS_COUNTER <- values$RESULTS_COUNTER + 1
     row <- data.frame(
@@ -260,21 +261,31 @@ server <- function(input, output) {
       interactingcols = paste(input$interactingcols, collapse = ","),
       nestedcols = paste(input$nestedcols, collapse = ","),
       model_string = values$MODEL_STRING,
-      model = "run_model(df = X, model_string = MODEL_STRING)",
       stringsAsFactors = F)
+    values$MODEL_LIST[values$RESULTS_COUNTER] <- values$MODEL
     values$RESULTS <- rbind(values$RESULTS, row)
     # output$model <- renderPrint(
     #   run_model(data=X, x=input$xcol,  y=input$ycol, random=input$randomcols, 
     #             fixed=input$fixedcols, interacting=input$interactingcols, nested=list())
     # )
-    print("postupdated")
   })
   output$modelsdf <- renderDataTable({
     values$RESULTS
+  }) 
+  # cant have this displayed twice?
+  output$modelsdf2 <- renderDataTable({
+    values$RESULTS
   })
-  # output$model_output <- renderDataTable({
-  #   values$MODEL
-  # })
+  observeEvent(input$run_anova, {
+    model1 <-  values$MODEL_LIST[[as.numeric(input$model1)]]
+    model2 <-  values$MODEL_LIST[[as.numeric(input$model2)]]
+    aov <- anova(model1, model2)
+    print(aov)
+    
+    output$model_compare_output <- renderPrint({
+      return(aov)
+    })
+  })
 }
 
 # Run the application 
