@@ -1,24 +1,11 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(ggplot2)
 library(lme4)
-#install.packages("papeR")
-# library(stargazer)
-# look a global variable cause I'm a lazy duck
-#RESULTS_COUNTER = 0
-#RESULTS<-data.frame()
+
+# look global variables cause I'm a lazy duck
 X <- NA
 ORIGINALX <- X
 MODEL = NA
-MODEL_STRING = NA
 COLS <- NA
 sPAIRS <- NA
 PAIRS <- NA
@@ -27,23 +14,11 @@ X <-  read.csv("./data/testdata.csv",
                sep = ",",
                quote = "\"")
 
-updateX <- function(input=input){
+updateX <- function(){
   # This is a terrible function to update global variables X and cols
   COLS <<- colnames(X)
-  # print(COLS)
-  # try avoid setting columns that are not there, should something change
-  # for (col in COLS){
-  #   if (col in input$factorcols){
-  #     if (col %in%  COLS){
-  #       X[, col] <- as.factor(X[, col])
-  #     }
-  #   }
-  # }
-  X <<- X
   sPAIRS <<- paste(expand.grid(COLS, COLS)$Var1, expand.grid(COLS, COLS)$Var2)
   PAIRS <<- strsplit(sPAIRS, " ")
-  
-  # str(X)
 }
 updateX()
 
@@ -92,23 +67,17 @@ make_model<- function(x, y, random=c(), fixed=c(), interacting=list(), nested=li
   }
   return(mx)
 }
-run_model <- function( model_string, df){
-  print(df)
-  print(model_string)
-  # return(lm(model_string, data=df))
-  return(lmer(model_string, data=df, REML=FALSE))
-}
 # Define UI for application that draws a histogram
 ui <- fluidPage(
   
   # Application title
-  titlePanel("Mixed Effects Linear model Time Series"),
+#  titlePanel("Mixed Effects Linear model Time Series"),
   # Input: Select a file ----
   # Sidebar with a slider input for number of bins 
   sidebarLayout(
     sidebarPanel(
       fileInput(
-        "file1", "Choose CSV File",
+        "userfile", "Choose CSV File",
         multiple = FALSE,
         accept = c("text/csv",
                    "text/comma-separated-values,text/plain",
@@ -116,25 +85,28 @@ ui <- fluidPage(
       ),
       # tags$hr(),
       selectInput("xcol", "X column/Independent Variable", choices=COLS, selected=COLS[1]),
-      selectInput("ycol", "y column/Dependent Variable", choices=COLS, selected = COLS[5]),
-      # selectInput("groupcol", "group column", choices=COLS, selected = COLS[2]),
+      selectInput("ycol", "Y column/Dependent Variable", choices=COLS, selected = COLS[5]),
       checkboxGroupInput("fixedcols", "Fixed Effects", choices = COLS),
       checkboxGroupInput("randomcols", "Random Effects", choices = COLS), #, multiple = T),
       selectInput("interactingcols", "Interacting Effects", choices = sPAIRS, multiple=T)
       #      checkboxGroupInput("Nestedcols", "Interating Effects", choices = COLS)
-      # actionButton("add", "Update Model")
     ),
     
     # Show a plot of the generated distribution
     mainPanel(
       tabsetPanel(
         tabPanel(
-          "Plot", 
-          dataTableOutput("contents"),
-          plotOutput("exploreplot")
+          "?. Help", 
+          includeMarkdown("../README.md")
+          
         ),
         tabPanel(
-          "Model",
+          "1. Plot", 
+          dataTableOutput("contents")
+#          plotOutput("exploreplot")
+        ),
+        tabPanel(
+          "2. Model",
           verbatimTextOutput("model"),
           actionButton("A_execute_model", "Execute Model"),
           verbatimTextOutput("model_output"),
@@ -142,7 +114,7 @@ ui <- fluidPage(
           dataTableOutput("modelsdf")
         ),
         tabPanel(
-          "Compare",
+          "3. Compare",
           dataTableOutput("modelsdf2"),
           selectInput("model1", "A: ID Model ID from first column of list above ", choices = c(1:100), multiple=F, selected = 1),
           selectInput("model2", "B: ID Model ID from first column of list above ", choices = c(1:100), multiple=F, selected = 2),
@@ -157,27 +129,27 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-  values <- reactiveValues(RESULTS = data.frame(), RESULTS_COUNTER=0, MODEL=NA, MODEL_STRING=NA, MODEL_LIST=list())
+  values <- reactiveValues(DF=NA, PAIRS=NA, RESULTS = data.frame(), RESULTS_COUNTER=0, MODEL=NA, MODEL_STRING=NA, MODEL_LIST=list())
   output$exploreplot <- renderPlot({
-    req(input$xcol)
+    req(values$DF)
     # print(input$fixedcols)
     # print(length(input$fixedcols))
     # print(input$fixedcols[1])
     try(
       if(is.null(input$fixedcols)){
-        ggplot(X, aes_string(y=input$ycol, x=input$xcol))+
+        ggplot(values$DF, aes_string(y=input$ycol, x=input$xcol))+
           geom_smooth(alpha=.2)+ 
           geom_jitter(width = .1)
       } else if(length(input$fixedcols) == 1){
-        ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], shape=input$fixedcols[1]))+
+        ggplot(values$DF, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], shape=input$fixedcols[1]))+
           geom_smooth(alpha=.2)+ 
           geom_jitter(width = .1)
       } else if(length(input$fixedcols) == 2){
-        ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], linetype=input$fixedcols[2], shape=input$fixedcols[1]))+
+        ggplot(values$DF, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], linetype=input$fixedcols[2], shape=input$fixedcols[1]))+
           geom_smooth(alpha=.2)+ 
           geom_jitter(width = .1)
       } else if(length(input$fixedcols) == 3){
-        ggplot(X, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], fill=input$fixedcols[2], linetype=input$fixedcols[3], shape=input$fixedcols[1]))+
+        ggplot(values$DF, aes_string(y=input$ycol, x=input$xcol, color=input$fixedcols[1], fill=input$fixedcols[2], linetype=input$fixedcols[3], shape=input$fixedcols[1]))+
           geom_smooth(alpha=.2)+ 
           geom_jitter(width = .1)
       }
@@ -185,48 +157,86 @@ server <- function(input, output) {
     )
     
   })
-  output$contents <- renderDataTable({
+  dataframe <- reactive({
     # input$file1 will be NULL initially. After the user selects
     # and uploads a file, head of that data file by default,
     # or all rows if selected, will be shown.
-    
-    #req(input$file1)
-    if (is.null(input$file)){
-      updateX(input)
-      return(X)
+    if (is.null(input$userfile)){
+      print("loading test data")
+      values$DF <- X
+      updateX()
+      return(values$DF)
+    } else{
+      df <- read.csv(input$userfile$datapath,
+                     header = T,
+                     sep = ",",
+                     quote = "\"")
+      
+      print("loading user data!")
+      values$DF <- df
+      updateX()
+      return(df)
+      
     }
-    # when reading semicolon separated files,
-    # having a comma separator causes `read.csv` to error
-    tryCatch(
-      {
-        df <- read.csv(input$file1$datapath,
-                       header = T,
-                       sep = ",",
-                       quote = "\"")
-      },
-      error = function(e) {
-        # return a safeError if a parsing error occurs
-        stop(safeError(e))
-      }
-    )
-    X <- df
-    updateX(input)
-    return(X)
-    
-  },   options = list(
+  })
+  
+  
+  
+  output$contents <- renderDataTable({
+    dataframe()
+  }, options = list(
     pageLength = 5)
   )
-  
-  ###################################################################
-  # observeEvent(input$add, {
-  #   values$MODEL_STRING <- make_model(x=input$xcol,  y=input$ycol, random=input$randomcols,
-  #                                     fixed=input$fixedcols, interacting=input$interactingcols,
-  #                                     nested=list())
-  #   output$model <- renderText(
-  #     values$MODEL_STRING
+  # input$file1 will be NULL initially. After the user selects
+    # and uploads a file, head of that data file by default,
+    # or all rows if selected, will be shown.
+    
+  # #req(input$file1)
+  # print(input$file)
+  # if (is.null(input$file)){
+  #   print("loading boring")
+  #   values$DF <- X
+  #   updateX(input)
+  #   return(values$DF)
+  # } else {
+  #   tryCatch(
+  #     {
+  #       df <- read.csv(input$file1$datapath,
+  #                      header = T,
+  #                      sep = ",",
+  #                      quote = "\"")
+  #     },
+  #     error = function(e) {
+  #       # return a safeError if a parsing error occurs
+  #       stop(safeError(e))
+  #     }
   #   )
-  #   #output$ui <- renderUI(checkboxInput('test', 'checkboxes', colnames(input$file1)))
-  # })
+  #   print("uploaded!")
+  #   values$DF <- df
+  #   updateX()
+  #   return(values$DF)
+  #   
+  # }
+  # when reading semicolon separated files,
+    # # having a comma separator causes `read.csv` to error
+    # tryCatch(
+    #   {
+    #     df <- read.csv(input$file1$datapath,
+    #                    header = T,
+    #                    sep = ",",
+    #                    quote = "\"")
+    #   },
+    #   error = function(e) {
+    #     # return a safeError if a parsing error occurs
+    #     stop(safeError(e))
+    #   }
+    # )
+    # print("uploaded!")
+    # values$DF <- df
+    # updateX()
+    # return(values$DF)
+    
+  
  output$model <- renderText(
     make_model(x=input$xcol,  y=input$ycol, random=input$randomcols,
                fixed=input$fixedcols, interacting=input$interactingcols,
@@ -264,10 +274,6 @@ server <- function(input, output) {
       stringsAsFactors = F)
     values$MODEL_LIST[values$RESULTS_COUNTER] <- values$MODEL
     values$RESULTS <- rbind(values$RESULTS, row)
-    # output$model <- renderPrint(
-    #   run_model(data=X, x=input$xcol,  y=input$ycol, random=input$randomcols, 
-    #             fixed=input$fixedcols, interacting=input$interactingcols, nested=list())
-    # )
   })
   output$modelsdf <- renderDataTable({
     values$RESULTS
